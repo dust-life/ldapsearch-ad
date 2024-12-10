@@ -42,6 +42,9 @@ Documentation = "https://github.com/yaap7/ldapsearch-ad/blob/master/USAGE.md"
 Repository = "https://github.com/yaap7/ldapsearch-ad"
 Changelog = "https://github.com/yaap7/ldapsearch-ad/releases"
 
+[tool.black]
+line-length = 130
+
 [tool.bumpver]
 current_version = "2024.7.23"
 version_pattern = "YYYY.MM.DD"
