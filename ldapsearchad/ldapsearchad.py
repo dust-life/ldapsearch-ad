@@ -60,15 +60,11 @@ class LdapsearchAd:
                 self.lmhash, self.nthash = self.hashes.split(":")
             except ValueError as ve:
                 print("Error: The hash need to be in the following format:")
-                print(
-                    "aad3b435b51404eeaad3b435b51404ee:382c7bf814461d8d685cf7a7a06c8c8f"
-                )
+                print("aad3b435b51404eeaad3b435b51404ee:382c7bf814461d8d685cf7a7a06c8c8f")
                 print("")
                 raise ve
         try:
-            self.server = ldap3.Server(
-                self.hostname, self.port, use_ssl=ssl, get_info="ALL"
-            )
+            self.server = ldap3.Server(self.hostname, self.port, use_ssl=ssl, get_info="ALL")
             if self.domain and self.username:
                 if self.password:
                     self.connection = ldap3.Connection(
@@ -91,13 +87,9 @@ class LdapsearchAd:
                         read_only=True,
                     )
                 else:
-                    raise LsaException(
-                        "Need either password or hash to try to authenticate."
-                    )
+                    raise LsaException("Need either password or hash to try to authenticate.")
             else:
-                self.connection = ldap3.Connection(
-                    self.server, auto_bind=True, read_only=True
-                )
+                self.connection = ldap3.Connection(self.server, auto_bind=True, read_only=True)
         except ldap3.core.exceptions.LDAPSocketOpenError as ldapsoe:
             self.last_errors.append(f"Unable to connect to {self.hostname}.")
             raise ldapsoe
@@ -109,44 +101,30 @@ class LdapsearchAd:
         return self.server is not None and self.connection is not None
 
     def is_authenticated(self):
-        return (
-            self.server is not None
-            and self.connection is not None
-            and self.connection.authentication != ldap3.ANONYMOUS
-        )
+        return self.server is not None and self.connection is not None and self.connection.authentication != ldap3.ANONYMOUS
 
     def infos(self):
         if not self.is_connected():
             raise LsaException("Need to be connected before reading server's infos.")
-        log_info(
-            f'Forest functionality level = {str_functionality_level(self.server.info.other["forestFunctionality"][0])}'
-        )
-        log_info(
-            f'Domain functionality level = {str_functionality_level(self.server.info.other["domainFunctionality"][0])}'
-        )
+        log_info(f'Forest functionality level = {str_functionality_level(self.server.info.other["forestFunctionality"][0])}')
+        log_info(f'Domain functionality level = {str_functionality_level(self.server.info.other["domainFunctionality"][0])}')
         log_info(
             f'Domain controller functionality level = {str_functionality_level(self.server.info.other["domainControllerFunctionality"][0])}'
         )
-        log_info(
-            f'rootDomainNamingContext = {self.server.info.other["rootDomainNamingContext"][0]}'
-        )
-        log_info(
-            f'defaultNamingContext = {self.server.info.other["defaultNamingContext"][0]}'
-        )
+        log_info(f'rootDomainNamingContext = {self.server.info.other["rootDomainNamingContext"][0]}')
+        log_info(f'defaultNamingContext = {self.server.info.other["defaultNamingContext"][0]}')
         log_info(f'ldapServiceName = {self.server.info.other["ldapServiceName"][0]}')
         log_info(f"naming_contexts = {self.server.info.naming_contexts}")
 
     def whoami(self):
         if not self.is_connected():
-            raise LsaException(
-                "Need to be connected before trying to check who you are."
-            )
+            raise LsaException("Need to be connected before trying to check who you are.")
         if self.connection.extend.standard.who_am_i():
             log_success(self.connection.extend.standard.who_am_i())
         else:
             log_error("<not_connected>")
 
-    def search(self, search_filter, attributes="*", size_limit=100, page_size=1000):
+    def search(self, search_filter, attributes="*", size_limit=100, page_size=1000, search_base=None):
         """Warning: returns a generator!
         Thus, it is not backward compatible with the old_search
         Arguments:
@@ -156,32 +134,34 @@ class LdapsearchAd:
         * a generator of CaseInsensitiveDict"""
 
         if not self.is_authenticated():
-            raise LsaException(
-                "Need to be authenticated before trying to search for something."
-            )
+            raise LsaException("Need to be authenticated before trying to search for something.")
         if isinstance(size_limit, str):
             try:
                 size_limit = int(size_limit)
             except ValueError:
                 raise LsaException("size_limit (-z) should be a valid integer")
         nb_entries = 0
-        base_dn = self.server.info.other.get("defaultNamingContext")[0]
-        self.connection.search(
-            search_base=base_dn,
-            search_filter=search_filter,
-            search_scope=ldap3.SUBTREE,
-            attributes=attributes,
-            paged_size=page_size,
-            size_limit=size_limit,
-        )
+        if search_base:
+            base_dn = search_base
+        else:
+            base_dn = self.server.info.other.get("defaultNamingContext")[0]
+        try:
+            self.connection.search(
+                search_base=base_dn,
+                search_filter=search_filter,
+                search_scope=ldap3.SUBTREE,
+                attributes=attributes,
+                paged_size=page_size,
+                size_limit=size_limit,
+            )
+        except ldap3.core.exceptions.LDAPSocketOpenError:
+            raise LsaException("LDAPSocketOpenError during search. Maybe the search_base is incorrect?")
         for entry in self.connection.response:
             if entry["type"] == "searchResEntry":
                 nb_entries += 1
                 yield entry["attributes"]
         if "controls" in self.connection.result:
-            cookie = self.connection.result["controls"]["1.2.840.113556.1.4.319"][
-                "value"
-            ]["cookie"]
+            cookie = self.connection.result["controls"]["1.2.840.113556.1.4.319"]["value"]["cookie"]
             size_limit -= nb_entries
             nb_entries = 0
         else:
@@ -202,9 +182,7 @@ class LdapsearchAd:
                     nb_entries += 1
                     yield entry["attributes"]
             if "controls" in self.connection.result:
-                cookie = self.connection.result["controls"]["1.2.840.113556.1.4.319"][
-                    "value"
-                ]["cookie"]
+                cookie = self.connection.result["controls"]["1.2.840.113556.1.4.319"]["value"]["cookie"]
                 size_limit -= nb_entries
                 nb_entries = 0
             else:
@@ -227,13 +205,9 @@ class LdapsearchAd:
             group_cn = re.search("CN=([^,]*),", group).group(1)
             if re.search("^(enterprise admins)$", group_cn, re.IGNORECASE):
                 groups.append(c_red(group_cn))
-            elif re.search(
-                "^(domain admins|admins du domaine)$", group_cn, re.IGNORECASE
-            ):
+            elif re.search("^(domain admins|admins du domaine)$", group_cn, re.IGNORECASE):
                 groups.append(c_red(group_cn))
-            elif re.search(
-                "^(administrators|administrateurs)$", group_cn, re.IGNORECASE
-            ):
+            elif re.search("^(administrators|administrateurs)$", group_cn, re.IGNORECASE):
                 groups.append(c_red(group_cn))
             elif re.search("admin", group_cn, re.IGNORECASE):
                 groups.append(c_orange(group_cn))
@@ -255,16 +229,10 @@ class LdapsearchAd:
             elif user["admincount"] == 0:
                 log_info(f'{tab}|__ {"adminCount = 0"}')
             else:
-                log_error(
-                    f'{tab}|__ Unknown value for adminCount: {user["admincount"]}'
-                )
+                log_error(f'{tab}|__ Unknown value for adminCount: {user["admincount"]}')
         if "userAccountControl" in user:
-            log_info(
-                f'{tab}|__ userAccountControl = {", ".join(list_uac_colored_flags(user["userAccountControl"]))}'
-            )
-        log_info(
-            f'{tab}|__ sAMAccountType = {str_samaccounttype(user["samaccounttype"])}'
-        )
+            log_info(f'{tab}|__ userAccountControl = {", ".join(list_uac_colored_flags(user["userAccountControl"]))}')
+        log_info(f'{tab}|__ sAMAccountType = {str_samaccounttype(user["samaccounttype"])}')
         if "memberOf" in user:
             log_info(f'{tab}|__ memberOf = {", ".join(self.__list_groups(user))}')
 
@@ -276,9 +244,7 @@ class LdapsearchAd:
                     f'{tab}{user["sAMAccountName"]} (objectclass = foreignSecurityPrincipal, probably a user from another domain. Please investigate)'
                 )
             else:
-                log_warning(
-                    f'{tab}{user["sAMAccountName"]} ({c_orange(str_object_type(user))})'
-                )
+                log_warning(f'{tab}{user["sAMAccountName"]} ({c_orange(str_object_type(user))})')
         else:
             uac_flags = list_uac_colored_flags(user["userAccountControl"])
             uac_flags.remove("NORMAL_ACCOUNT")
@@ -297,9 +263,7 @@ class LdapsearchAd:
             nb_members = len(group["member"])
         else:
             nb_members = 0
-        log_info(
-            f'{tab}{group["sAMAccountName"]}§{str_object_type(group)}§{description}§{nb_members}'
-        )
+        log_info(f'{tab}{group["sAMAccountName"]}§{str_object_type(group)}§{description}§{nb_members}')
 
     def print_users(self, search_filter, attributes="*", size_limit=100):
         """Method to pretty print a set a users attributes."""
@@ -319,9 +283,7 @@ class LdapsearchAd:
         search_filter = f"(CN={group_cn})"
         # Get the exact distinguishedName of the requested group
         # needed to perform a recursive search of members of members of members ...
-        targeted_groups = self.search(
-            search_filter, ["distinguishedName", "cn"], size_limit=100
-        )
+        targeted_groups = self.search(search_filter, ["distinguishedName", "cn"], size_limit=100)
         # should be only one...
         for targeted_group in targeted_groups:
             group_dn = targeted_group["distinguishedName"]
@@ -356,9 +318,7 @@ class LdapsearchAd:
         Also use the nested groups"""
         # Get the exact distinguishedName of the requested user
         # needed to perform a recursive search of his groups ...
-        targeted_users = self.search(
-            search_filter, ["distinguishedName", "cn"], size_limit=100
-        )
+        targeted_users = self.search(search_filter, ["distinguishedName", "cn"], size_limit=100)
         # should be only one...
         for targeted_user in targeted_users:
             user_dn = targeted_user["distinguishedName"]
@@ -381,12 +341,8 @@ class LdapsearchAd:
         """Method to get infos about trusts."""
         for trust in self.search("(objectClass=trustedDomain)"):
             log_info(f'+ {trust["name"]} ({trust["flatName"]})')
-            log_info(
-                f'|__ trustAttributes = {list_trust_attributes(trust["trustAttributes"])}'
-            )
-            log_info(
-                f'|__ trustDirection = {list_trust_direction(trust["trustDirection"])}'
-            )
+            log_info(f'|__ trustAttributes = {list_trust_attributes(trust["trustAttributes"])}')
+            log_info(f'|__ trustDirection = {list_trust_direction(trust["trustDirection"])}')
             log_info(f'|__ trustType = {list_trust_type(trust["trustType"])}')
             log_info(f'|__ trustPartner = {trust["trustPartner"]}')
             if "securityIdentifier" in trust:
@@ -421,12 +377,8 @@ class LdapsearchAd:
                 log_success(f'|__ Lockout threshold = {pass_pol["lockoutThreshold"]}')
             else:
                 log_info(f'|__ Lockout threshold = {pass_pol["lockoutThreshold"]}')
-            log_info(
-                f'|__ Lockout duration = {str_human_date(pass_pol["lockoutDuration"])}'
-            )
-            log_info(
-                f'|__ Lockout observation window = {str_human_date(pass_pol["lockOutObservationWindow"])}'
-            )
+            log_info(f'|__ Lockout duration = {str_human_date(pass_pol["lockoutDuration"])}')
+            log_info(f'|__ Lockout observation window = {str_human_date(pass_pol["lockOutObservationWindow"])}')
         # Password history length
         if pass_pol["pwdHistoryLength"] > 0:
             log_success(f'|__ Password history length = {pass_pol["pwdHistoryLength"]}')
@@ -439,9 +391,7 @@ class LdapsearchAd:
     def __print_pass_pol(self, pass_pol):
         """Print info about a Fine-Grained Password Policy."""
         log_info(f'Fined grained password policy found: {c_cyan(pass_pol["cn"])}')
-        log_info(
-            f'|__ Password settings precedence = {pass_pol["msDS-PasswordSettingsPrecedence"]}'
-        )
+        log_info(f'|__ Password settings precedence = {pass_pol["msDS-PasswordSettingsPrecedence"]}')
         pass_len = pass_pol["msDS-MinimumPasswordLength"]
         # Password length
         if pass_len < 8:
@@ -461,36 +411,22 @@ class LdapsearchAd:
                 f'|__ Password reversible encryption enabled = {c_white_on_red(pass_pol["msDS-PasswordReversibleEncryptionEnabled"])}'
             )
         else:
-            log_info(
-                f'|__ Password reversible encryption enabled = {pass_pol["msDS-PasswordReversibleEncryptionEnabled"]}'
-            )
+            log_info(f'|__ Password reversible encryption enabled = {pass_pol["msDS-PasswordReversibleEncryptionEnabled"]}')
         # Lockout settings
         if pass_pol["msDS-LockoutThreshold"] == 0:
             log_success(f'|__ Lockout threshold = {c_white_on_red("Disabled")}')
         else:
             log_info(f'|__ Lockout threshold = {pass_pol["msDS-LockoutThreshold"]}')
-            log_info(
-                f'|__ Lockout duration = {str_human_date(pass_pol["msDS-LockoutDuration"])}'
-            )
-            log_info(
-                f'|__ Lockout observation window = {str_human_date(pass_pol["msDS-LockoutObservationWindow"])}'
-            )
+            log_info(f'|__ Lockout duration = {str_human_date(pass_pol["msDS-LockoutDuration"])}')
+            log_info(f'|__ Lockout observation window = {str_human_date(pass_pol["msDS-LockoutObservationWindow"])}')
         # Password history length
         if pass_pol["msDS-PasswordHistoryLength"] > 0:
-            log_success(
-                f'|__ Password history length = {pass_pol["msDS-PasswordHistoryLength"]}'
-            )
+            log_success(f'|__ Password history length = {pass_pol["msDS-PasswordHistoryLength"]}')
         else:
-            log_info(
-                f'|__ Password history length = {pass_pol["msDS-PasswordHistoryLength"]}'
-            )
+            log_info(f'|__ Password history length = {pass_pol["msDS-PasswordHistoryLength"]}')
         # Password min and max age
-        log_info(
-            f'|__ Max password age = {str_human_date(pass_pol["msDS-MaximumPasswordAge"])}'
-        )
-        log_info(
-            f'|__ Min password age = {str_human_date(pass_pol["msDS-MinimumPasswordAge"])}'
-        )
+        log_info(f'|__ Max password age = {str_human_date(pass_pol["msDS-MaximumPasswordAge"])}')
+        log_info(f'|__ Min password age = {str_human_date(pass_pol["msDS-MinimumPasswordAge"])}')
         log_info(f'|__ PSO applies to = {pass_pol["msDS-PSOAppliesTo"]}')
 
     def print_pass_pols(self):
@@ -512,9 +448,7 @@ class LdapsearchAd:
             nb_fgpps += 1
             self.__print_pass_pol(fgpp)
         if nb_fgpps <= 0:
-            log_info(
-                "No fine grained password policy found (high privileges are required)."
-            )
+            log_info("No fine grained password policy found (high privileges are required).")
 
     def print_admins(self, size_limit=100):
         """Method to get a list of members of the "admin" group."""
@@ -523,9 +457,7 @@ class LdapsearchAd:
         search_filter = f"(|{english_groups}{french_groups})"
         # Get the exact distinguishedName of the "admin" group
         # needed to perform a recursive search of members of members of members ...
-        admin_groups = self.search(
-            search_filter, ["distinguishedName", "cn"], size_limit=10
-        )
+        admin_groups = self.search(search_filter, ["distinguishedName", "cn"], size_limit=10)
         for admin_group in admin_groups:
             admins_dn = admin_group["distinguishedName"]
             log_info(f'All members of group "{admin_group["cn"]}":')
@@ -574,9 +506,7 @@ class LdapsearchAd:
         if not re.search("serviceprincipalname", search_filter, re.IGNORECASE):
             search_filter = f"(servicePrincipalName={search_filter}*)"
         search_attributes = ["cn", "samaccountname", "serviceprincipalname"]
-        for spn_user in self.search(
-            search_filter, search_attributes, size_limit=size_limit
-        ):
+        for spn_user in self.search(search_filter, search_attributes, size_limit=size_limit):
             self.__print_user_with_spn(spn_user)
 
     def print_lastpwchangekrbtgt(self):
@@ -593,9 +523,7 @@ class LdapsearchAd:
         """Method to retreive accounts with TRUSTED_FOR_DELEGATION set in userAccountControl"""
         search_filter = "(userAccountControl:1.2.840.113556.1.4.803:=524288)"
         search_attributes = ["samaccountname"]
-        for account_trusted_for_delegation in self.search(
-            search_filter, search_attributes
-        ):
+        for account_trusted_for_delegation in self.search(search_filter, search_attributes):
             log_success(f"{account_trusted_for_delegation['sAMAccountName']}")
 
     def print_creator_sid(self):
@@ -611,14 +539,10 @@ class LdapsearchAd:
             # parse objectSid
             search_filter_get_name = f"(objectSid={sid_str})"
             search_attributes_get_name = ["sAMAccountName"]
-            asreqroastuser_get_name_obj = self.search(
-                search_filter_get_name, search_attributes_get_name
-            )
+            asreqroastuser_get_name_obj = self.search(search_filter_get_name, search_attributes_get_name)
             if asreqroastuser_get_name_obj:
                 for asreqroastuser_get_name in asreqroastuser_get_name_obj:
                     if asreqroastuser_get_name["sAMAccountName"] is not None:
-                        log_info(
-                            f'CreatorSID: {asreqroastuser_get_name["sAMAccountName"]}'
-                        )
+                        log_info(f'CreatorSID: {asreqroastuser_get_name["sAMAccountName"]}')
             else:
                 log_error("Maybe already deleted")
