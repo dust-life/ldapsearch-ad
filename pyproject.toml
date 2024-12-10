@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ldapsearchad"
-version = "2024.7.23"
+version = "2024.12.10"
 description = "ldapsearch tool to find vulnerable configuration in Active Directory"
 readme = "README.md"
 authors = [{ name = "yaap", email = "gracieux.guillaume@gmail.com" }]
@@ -46,7 +46,7 @@ Changelog = "https://github.com/yaap7/ldapsearch-ad/releases"
 line-length = 130
 
 [tool.bumpver]
-current_version = "2024.7.23"
+current_version = "2024.12.10"
 version_pattern = "YYYY.MM.DD"
 commit_message  = "Bump version {old_version} -> {new_version}"
 commit          = true
